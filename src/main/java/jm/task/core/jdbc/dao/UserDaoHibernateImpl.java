@@ -4,10 +4,9 @@ import jm.task.core.jdbc.model.User;
 import jm.task.core.jdbc.util.Util;
 import org.hibernate.Session;
 import org.hibernate.Transaction;
-import org.hibernate.query.Query;
+import org.hibernate.resource.transaction.spi.TransactionStatus;
 
-import javax.persistence.criteria.CriteriaBuilder;
-import javax.persistence.criteria.CriteriaQuery;
+import javax.persistence.TypedQuery;
 import java.util.List;
 
 public class UserDaoHibernateImpl implements UserDao {
@@ -26,10 +25,17 @@ public class UserDaoHibernateImpl implements UserDao {
             session.createSQLQuery("CREATE TABLE IF NOT EXISTS users (Id BIGINT AUTO_INCREMENT PRIMARY KEY, Name VARCHAR(255), Lastname VARCHAR(255), Age TINYINT);").executeUpdate();
             transaction.commit();
         } catch (Exception e) {
-            if (transaction != null) transaction.rollback();
+            if (transaction != null && transaction.getStatus() != TransactionStatus.COMMITTED) {
+                try {
+                    transaction.rollback();
+                } catch (Exception rollbackEx) {
+                    rollbackEx.printStackTrace();
+                }
+            }
             e.printStackTrace();
         } finally {
-            session.close();
+            if (session != null)
+                session.close();
         }
     }
 
@@ -43,10 +49,17 @@ public class UserDaoHibernateImpl implements UserDao {
             session.createSQLQuery("DROP TABLE IF EXISTS users;").executeUpdate();
             transaction.commit();
         } catch (Exception e) {
-            if (transaction != null) transaction.rollback();
+            if (transaction != null && transaction.getStatus() != TransactionStatus.COMMITTED) {
+                try {
+                    transaction.rollback();
+                } catch (Exception rollbackEx) {
+                    rollbackEx.printStackTrace();
+                }
+            }
             e.printStackTrace();
         } finally {
-            session.close();
+            if (session != null)
+                session.close();
         }
     }
 
@@ -60,10 +73,17 @@ public class UserDaoHibernateImpl implements UserDao {
             session.save(new User(name, lastName, age));
             transaction.commit();
         } catch (Exception e) {
-            if (transaction != null) transaction.rollback();
+            if (transaction != null && transaction.getStatus() != TransactionStatus.COMMITTED) {
+                try {
+                    transaction.rollback();
+                } catch (Exception rollbackEx) {
+                    rollbackEx.printStackTrace();
+                }
+            }
             e.printStackTrace();
         } finally {
-            session.close();
+            if (session != null)
+                session.close();
         }
     }
 
@@ -74,40 +94,72 @@ public class UserDaoHibernateImpl implements UserDao {
         try {
             session = Util.getSessionFactory().openSession();
             transaction = session.beginTransaction();
-            User user = session.get(User.class, id);
-            session.delete(user);
+            String HQL = "DELETE User WHERE id = :id";
+            session.createQuery(HQL).setParameter("id", id).executeUpdate();
             transaction.commit();
         } catch (Exception e) {
-            if (transaction != null) transaction.rollback();
+            if (transaction != null && transaction.getStatus() != TransactionStatus.COMMITTED) {
+                try {
+                    transaction.rollback();
+                } catch (Exception rollbackEx) {
+                    rollbackEx.printStackTrace();
+                }
+            }
             e.printStackTrace();
         } finally {
-            session.close();
+            if (session != null)
+                session.close();
         }
     }
 
     @Override
     public List<User> getAllUsers() {
-        try (Session session = Util.getSessionFactory().openSession()) {
-            CriteriaBuilder cb = session.getCriteriaBuilder();
-            CriteriaQuery<User> cq = cb.createQuery(User.class);
-            cq.from(User.class);
-            Query<User> query = session.createQuery(cq);
-            return query.getResultList();
+        Transaction transaction = null;
+        Session session = null;
+        try {
+            session = Util.getSessionFactory().openSession();
+            transaction = session.beginTransaction();
+            TypedQuery<User> tq = session.createQuery("SELECT u FROM User u", User.class);
+            List<User> list = tq.getResultList();
+            transaction.commit();
+            return list;
+        } catch (Exception e) {
+            if (transaction != null && transaction.getStatus() != TransactionStatus.COMMITTED) {
+                try {
+                    transaction.rollback();
+                } catch (Exception rollbackEx) {
+                    rollbackEx.printStackTrace();
+                }
+                e.printStackTrace();
+            }
+        } finally {
+            if (session != null)
+                session.close();
         }
+        return null;
     }
 
     @Override
     public void cleanUsersTable() {
+        Session session = null;
         Transaction transaction = null;
-        try (Session session = Util.getSessionFactory().openSession()) {
+        try {
+            session = Util.getSessionFactory().openSession();
             transaction = session.beginTransaction();
             session.createSQLQuery("TRUNCATE TABLE users").executeUpdate();
             transaction.commit();
         } catch (Exception e) {
-            if (transaction != null) {
-                transaction.rollback();
+            if (transaction != null && transaction.getStatus() != TransactionStatus.COMMITTED) {
+                try {
+                    transaction.rollback();
+                } catch (Exception rollbackEx) {
+                    rollbackEx.printStackTrace();
+                }
             }
             e.printStackTrace();
+        } finally {
+            if (session != null)
+                session.close();
         }
     }
 }
